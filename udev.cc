@@ -16,9 +16,9 @@ static void PushProperties(Local<Object> obj, struct udev_device* dev) {
         name = udev_list_entry_get_name(entry);
         value = udev_list_entry_get_value(entry);
         if (value != NULL) {
-            obj->Set(Nan::New<String>(name).ToLocalChecked(), Nan::New<String>(value).ToLocalChecked());
+          Nan::Set(obj, Nan::New<String>(name).ToLocalChecked(), Nan::New<String>(value).ToLocalChecked());
         } else {
-            obj->Set(Nan::New<String>(name).ToLocalChecked(), Nan::Null());
+          Nan::Set(obj, Nan::New<String>(name).ToLocalChecked(), Nan::Null());
         }
     }
 }
@@ -32,9 +32,9 @@ static void PushSystemAttributes(Local<Object> obj, struct udev_device* dev) {
         name = udev_list_entry_get_name(entry);
         value = udev_device_get_sysattr_value(dev, name);
         if (value != NULL) {
-            obj->Set(Nan::New<String>(name).ToLocalChecked(), Nan::New<String>(value).ToLocalChecked());
+          Nan::Set(obj, Nan::New<String>(name).ToLocalChecked(), Nan::New<String>(value).ToLocalChecked());
         } else {
-            obj->Set(Nan::New<String>(name).ToLocalChecked(), Nan::Null());
+          Nan::Set(obj, Nan::New<String>(name).ToLocalChecked(), Nan::Null());
         }
     }
 }
@@ -59,14 +59,15 @@ class Monitor : public node::ObjectWrap {
         }
 
         Local<Object> obj = Nan::New<Object>();
-        obj->Set(Nan::New<String>("syspath").ToLocalChecked(), Nan::New<String>(udev_device_get_syspath(dev)).ToLocalChecked());
+        Nan::Set(obj, Nan::New<String>("syspath").ToLocalChecked(), Nan::New<String>(udev_device_get_syspath(dev)).ToLocalChecked());
         PushProperties(obj, dev);
 
-        Local<Function> emit = monitor->Get(Nan::New<String>("emit").ToLocalChecked()).As<Function>();
+        Local<Context> context = Nan::GetCurrentContext();
+        Local<Function> emit = monitor->Get(context, Nan::New<String>("emit").ToLocalChecked()).ToLocalChecked().As<Function>();
         Local<Value> emitArgs[2];
         emitArgs[0] = Nan::New<String>(udev_device_get_action(dev)).ToLocalChecked();
         emitArgs[1] = obj;
-        emit->Call(monitor, 2, emitArgs);
+        emit->Call(context, monitor, 2, emitArgs).ToLocalChecked();
 
         udev_device_unref(dev);
     };
@@ -81,7 +82,8 @@ class Monitor : public node::ObjectWrap {
         obj->poll_handle = handle = new uv_poll_t;
 
         if (info[0]->IsString()) {
-            v8::Local<v8::String> subsystem = info[0]->ToString();
+          Local<Context> context = Nan::GetCurrentContext();
+          v8::Local<v8::String> subsystem = info[0]->ToString(context).ToLocalChecked();
             int r;
             r = udev_monitor_filter_add_match_subsystem_devtype(obj->mon,
                     *Nan::Utf8String(subsystem), NULL);
@@ -119,7 +121,7 @@ class Monitor : public node::ObjectWrap {
     }
 
     public:
-    static void Init(Handle<Object> target) {
+    static void Init(Local<Object> target) {
         // I do not remember why the functiontemplate was tugged into a persistent.
         static Nan::Persistent<FunctionTemplate> constructor;
 
@@ -135,7 +137,7 @@ class Monitor : public node::ObjectWrap {
         //target->Set(
         Nan::Set(
             target,
-            Nan::New<String>("Monitor").ToLocalChecked(), 
+            Nan::New<String>("Monitor").ToLocalChecked(),
             Nan::GetFunction(tpl).ToLocalChecked()
         );
     }
@@ -153,7 +155,8 @@ NAN_METHOD(List) {
     enumerate = udev_enumerate_new(udev);
     // add match etc. stuff.
     if(info[0]->IsString()) {
-        v8::Local<v8::String> subsystem = info[0]->ToString();
+        Local<Context> context = Nan::GetCurrentContext();
+        v8::Local<v8::String> subsystem = info[0]->ToString(context).ToLocalChecked();
         udev_enumerate_add_match_subsystem(enumerate, *Nan::Utf8String(subsystem));
     }
     udev_enumerate_scan_devices(enumerate);
@@ -170,7 +173,7 @@ NAN_METHOD(List) {
         //obj->Set(
         Nan::Set(
             obj,
-            Nan::New<String>("syspath").ToLocalChecked(), 
+            Nan::New<String>("syspath").ToLocalChecked(),
             Nan::New<String>(path).ToLocalChecked()
         );
 
@@ -195,7 +198,8 @@ NAN_METHOD(GetNodeParentBySyspath) {
         return;
     }
 
-    v8::Local<v8::String> string = info[0]->ToString();
+    Local<Context> context = Nan::GetCurrentContext();
+    v8::Local<v8::String> string = info[0]->ToString(context).ToLocalChecked();
 
     dev = udev_device_new_from_syspath(udev, *Nan::Utf8String(string));
     if (dev == NULL) {
@@ -221,7 +225,7 @@ NAN_METHOD(GetNodeParentBySyspath) {
     //obj->Set(
     Nan::Set(
         obj,
-        Nan::New<String>("syspath").ToLocalChecked(), 
+        Nan::New<String>("syspath").ToLocalChecked(),
         Nan::New<String>(path).ToLocalChecked()
     );
 
@@ -242,7 +246,8 @@ NAN_METHOD(GetSysattrBySyspath) {
         return;
     }
 
-    v8::Local<v8::String> string = info[0]->ToString();
+    Local<Context> context = Nan::GetCurrentContext();
+    v8::Local<v8::String> string = info[0]->ToString(context).ToLocalChecked();
 
     dev = udev_device_new_from_syspath(udev, *Nan::Utf8String(string));
     if (dev == NULL) {
@@ -252,14 +257,14 @@ NAN_METHOD(GetSysattrBySyspath) {
 
     Local<Object> obj = Nan::New<Object>();
     PushSystemAttributes(obj, dev);
-    obj->Set(Nan::New<String>("syspath").ToLocalChecked(), string);
+    Nan::Set(obj, Nan::New<String>("syspath").ToLocalChecked(), string);
     udev_device_unref(dev);
 
     //NanReturnValue(obj);
     info.GetReturnValue().Set(obj);
 }
 
-static void Init(Handle<Object> target) {
+static void Init(Local<Object> target) {
     udev = udev_new();
 
     if (!udev) {
